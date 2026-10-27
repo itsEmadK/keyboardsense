@@ -1,0 +1,14 @@
+KeyboardSense is licensed under GPL-3.0-only (see LICENSE).
+
+The /dev/hid virtual DualSense ABI and button constants are adapted from:
+  AnyController — BallerIsLeet
+  https://github.com/BallerIsLeet/AnyController
+  commit 2eec5ec209f7e20369144de37e2358d1b2af0241 (GPL-3.0)
+  files: include/vpad.h, src/vpad.c, include/sce_pad.h
+
+AnyController credits FGG-XSense for discovering the virtual pad interface:
+  https://github.com/FGGstore/FGG-XSense
+
+USB transport research also referenced AnyController's src/transport/usb.c.
+Keyboard/mouse parsing, mappings, configuration, lifecycle, and tests are
+implemented for KeyboardSense. No Sony SDK headers or binaries are included.
