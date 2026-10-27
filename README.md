@@ -71,7 +71,8 @@ pad. A crash/forced kill may bypass cleanup; reboot if a virtual pad remains.
 
 ## Web input lab (port 1405)
 
-After loading the **v0.3.0** ELF, open `http://<PS5-IP>:1405/` from a browser on
+After loading the **v0.3.1** ELF, open **Media → KeyboardSense** on the console,
+or open `http://<PS5-IP>:1405/` from a browser on
 its LAN. All HTML, JavaScript, CSS, keyboard glyphs, and controller sprites are
 embedded in the ELF: no CDN, web folder upload, or browser plugin is required.
 
@@ -121,6 +122,34 @@ Artwork was found through web/GitHub research: DualSense sprites from
 [SVG Keyboard Icons by George Black](https://github.com/georgemblack/svg-keyboard-icons)
 (MIT). Full attribution is linked from the page footer and included in the source
 archive. No assets are downloaded by the runtime.
+
+### Media shortcut
+
+After the server binds port 1405, the payload installs/registers a
+**KeyboardSense** tile in the PS5's **Media** section. Its launch URI is
+`http://127.0.0.1:1405/`, so it opens this console's web UI without knowing its
+LAN address. The icon and metadata are embedded in the ELF; no separate PKG,
+internet connection, or app upload is needed. This uses the same title-directory
+registration pattern as PS5 Web File Manager and PS5 Browser Search, with a
+dedicated title ID `KBSN01405`.
+
+The tile is persistent, but **it does not start the payload**. After a reboot,
+load KeyboardSense through your ELF loader/payload manager before opening the
+tile. F12 stops the web server; the tile opens again once the payload is running.
+Opening it needs console validation, including the built-in browser's support
+for the input lab and settings UI on each firmware.
+
+Launcher files live only in `/user/app/KBSN01405/`. Matching assets are not
+rewritten on each startup, but the payload re-registers its own title to recover
+from database rebuilds or a failed previous attempt. It refuses to overwrite an
+existing title directory without its `.keyboardsense-webui` ownership marker.
+It does not edit app databases directly or register other app directories.
+Missing API/permissions or a registration failure are logged, and input/the
+web server continue normally. Registration is retried on the next startup.
+
+To remove the tile, select it and use **Options → Delete** on the PS5. It will
+be created again the next time this payload starts. The host preview never
+registers a console shortcut.
 
 ## Sidebar, bindings, and profiles
 

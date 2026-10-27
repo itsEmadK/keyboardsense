@@ -1,0 +1,17 @@
+{
+  "applicationCategoryType": 65536,
+  "applicationDrmType": "free",
+  "contentId": "IV9999-KBSN01405_00-KEYBOARDSENSE001",
+  "contentVersion": "01.000.000",
+  "deeplinkUri": "http://127.0.0.1:1405/",
+  "localizedParameters": {
+    "defaultLanguage": "en-US",
+    "en-US": {
+      "titleName": "KeyboardSense"
+    }
+  },
+  "masterVersion": "01.00",
+  "requiredSystemSoftwareVersion": "0x0000000000000000",
+  "sdkVersion": "0x0000000000000000",
+  "titleId": "KBSN01405"
+}

@@ -6,6 +6,7 @@
 #include "editor.h"
 #include "game.h"
 #include "overlay.h"
+#include "media.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -75,7 +76,13 @@ int main(void)
     if (ks_web_start(KS_WEB_PORT, false) != 0) {
         klog_printf("[KeyboardSense] web server start failed errno=%d\n", errno);
         notify("input active, but web UI could not bind port 1405");
-    } else notify("v0.3.0 running. F8 / Ctrl+Alt+M: sidebar. Settings at http://<PS5-IP>:1405/. F12 stops.");
+    } else {
+        char media_error[160];
+        if (ks_media_install_ps5(media_error, sizeof(media_error)) < 0) {
+            klog_printf("[KeyboardSense] %s\n", media_error);
+            notify("input active; Media shortcut unavailable. Open http://<PS5-IP>:1405/. F12 stops.");
+        } else notify("v0.3.1 running. Media > KeyboardSense opens settings. F8 / Ctrl+Alt+M: sidebar. F12 stops.");
+    }
     while (running) {
         uint64_t start = now_us();
         if (start >= next_scan) {

@@ -33,6 +33,16 @@ Running-game app-ID lookup follows the public etaHEN pattern:
   sceSystemServiceGetAppIdOfRunningBigApp + sceKernelGetAppInfo.
   The bounded kinfo_proc traversal is adapted from the overlay source above.
 
+Media shortcut registration API/metadata patterns were researched in:
+  https://github.com/owendswang/ps5-web-file-manager (GPL-3.0)
+  commit 246eb6f8605e005466d2c265a16f4bf1b233a4dc, src/app_installer.c,
+  assets/param.json; and https://github.com/kvnhrt/ps5-browser-app (GPL-3.0)
+  commit d427877157b5ffdf90847a0c3ad54c7025100f55, src/app_installer.c,
+  assets/param.json. The public PS5 payload SDK v0.45 samples/install_app
+  independently documents the title-directory API (John Tornblom, GPL-3.0-or-later).
+  KeyboardSense uses its own installer, metadata, and code-drawn icon. It adds
+  scoped registration, an ownership marker, atomic asset writes, and retries.
+
 Web interface third-party artwork has separate licenses:
   DualSense: "PS5 Button Icons and Controls" by Zacksly, CC BY 3.0.
   Source: https://zacksly.itch.io

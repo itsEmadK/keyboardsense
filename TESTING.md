@@ -1,6 +1,6 @@
 # Validation record
 
-Date: 2026-10-27. Version: 0.3.0 experimental.
+Date: 2026-10-27. Version: 0.3.1 experimental.
 
 ## Completed locally
 
@@ -8,9 +8,9 @@ Date: 2026-10-27. Version: 0.3.0 experimental.
 - Target compiler/linker: Homebrew LLVM/LLD 23.1.4.
 - PS5 payload SDK: v0.45; archive SHA-256
   `5fac64093d0e3e69f2584ce7935f24f703f622d9681f1495c85b9f00d1291a2c`.
-- `make test`: C mapper/configuration/descriptor tests, USB simulation, 1,000 exact C/JS mapper parity frames, web lifecycle/editor tests, and twelve
-  Python HTTP/payload/sender tests passed.
-- `make test-sanitize`: core, USB simulation, editor, web serialization/lifecycle, and the
+- `make test`: C mapper/configuration/descriptor tests, USB simulation, 1,000 exact C/JS mapper parity frames, web lifecycle/editor/Media installer tests, and fourteen
+  Python HTTP/Media asset/payload/sender tests passed.
+- `make test-sanitize`: core, USB simulation, editor, Media installer, web serialization/lifecycle, and the
   live HTTP worker passed under AddressSanitizer and UndefinedBehaviorSanitizer, including 20,000 generated malformed USB
   descriptor inputs.
 - Target build: application C sources compile with `-Wall -Wextra -Werror`;
@@ -46,6 +46,12 @@ Date: 2026-10-27. Version: 0.3.0 experimental.
   W. A sensitivity change applies through the actual C HTTP/backend queue and
   updates the active profile. Invalid fields prevent submission; Cancel discards
   changes. Mouse/Profiles tabs and labels were checked visually.
+- Media installer simulation verifies exact metadata/artwork, targeted title/root
+  arguments, repeat startup without rewriting matching assets, refresh, registration
+  retry, failed initialization, ownership collisions, and symlink protection. The
+  platform API is stubbed; no real PS5 app registration was performed. Asset tests
+  validate the Media category, localhost URI, title/content IDs, PNG CRCs/dimensions,
+  and complete decompression. The generated keyboard/mouse icon was inspected.
 
 The USB simulation replaces system calls. It does not verify Sony's USB/HID ABI,
 permissions, timing, firmware behavior, or actual device reports. CI is included
@@ -87,6 +93,11 @@ Record these fields for the first hardware test:
 | Web stale revision and simultaneous native editing rejected | Pending |
 | ShellUI responsiveness, game pause/system-menu transitions | Pending |
 | Renderer hides after shutdown; redeployment uses resident version | Pending |
+| Media → KeyboardSense tile appears and opens localhost:1405 | Pending |
+| Media shortcut remains after reboot; works once payload restarts | Pending |
+| Media shortcut opens with a game running; profile scope stays correct | Pending |
+| Built-in browser renders lab/settings and supports controller navigation | Pending |
+| Repeated start, registration failure/retry, Options → Delete/recreate | Pending |
 
 Use klog for attach errors. This payload logs interface/endpoint information and
 failures; it does not log typed keys or raw reports. Start with a standard wired

@@ -3,11 +3,11 @@
 HOST_CC ?= cc
 HOST_FLAGS = -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -g
 CORE = src/input.c src/config.c src/usb_descriptors.c src/editor.c
-SOURCES = $(CORE) src/main.c src/usb_input.c src/vpad.c src/web.c src/game_ps5.c
+SOURCES = $(CORE) src/main.c src/usb_input.c src/vpad.c src/web.c src/game_ps5.c src/media.c src/media_ps5.c
 NATIVE_CPP = native/overlay_bridge.cpp native/shellui_injector.cpp native/stable_shellui_injector.cpp native/remote_call.cpp native/shellui_hook_controller.cpp native/stable_sampler/proc_rw_v960.cpp
 NATIVE_C = native/stable_elfldr_bridge.c native/shsrv/pt.c
 NATIVE_OBJECTS = $(NATIVE_CPP:%.cpp=build/%.o) $(NATIVE_C:%.c=build/%.o) build/native/renderer_blob.o
-OBJECTS = $(SOURCES:src/%.c=build/ps5/%.o) build/ps5/web_assets.o $(NATIVE_OBJECTS)
+OBJECTS = $(SOURCES:src/%.c=build/ps5/%.o) build/ps5/web_assets.o build/ps5/media_assets.o $(NATIVE_OBJECTS)
 WEB_FILES = $(wildcard web/* web/assets/keys/* web/assets/dualsense/* web/assets/dualsense/pressed/*)
 
 # Host tests and cleanup do not require a PS5 SDK.
@@ -19,7 +19,7 @@ include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
 endif
 
 CFLAGS += -std=c11 -Wall -Wextra -Werror -O2 -Iinclude -MMD -MP
-LDFLAGS += -lkernel_sys -lpthread -lSceSystemService
+LDFLAGS += -lkernel_sys -lpthread -lSceSystemService -lSceAppInstUtil
 NATIVE_FLAGS = -Iinclude -Inative -Inative/shsrv -DPS5 -DCOMMON_FPS_DIAGNOSTIC_SYSCTL_ONLY=1 -DCOMMON_FPS_V121=1 -O2 -fPIC -fvisibility=hidden -ffunction-sections -fdata-sections -MMD -MP
 
 .PHONY: all test test-sanitize clean package send preview
@@ -65,6 +65,13 @@ build/ps5/web_assets.o: build/web_assets.c include/web.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+build/media_assets.c: tools/embed_media.py media/param.json
+	python3 tools/embed_media.py $@
+
+build/ps5/media_assets.o: build/media_assets.c include/media.h include/web.h
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 build/preview: tools/preview.c src/web.c $(CORE) build/web_assets.c include/web.h
 	$(HOST_CC) $(HOST_FLAGS) tools/preview.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o $@
 
@@ -82,21 +89,25 @@ build/test_usb: tests/test_usb.c src/usb_input.c $(CORE) include/usb_input.h tes
 build/test_editor: tests/test_editor.c $(CORE) include/editor.h
 	$(HOST_CC) $(HOST_FLAGS) tests/test_editor.c $(CORE) -lm -o $@
 
+build/test_media: tests/test_media.c src/media.c build/media_assets.c include/media.h
+	$(HOST_CC) $(HOST_FLAGS) tests/test_media.c src/media.c build/media_assets.c -o $@
+
 build/web_fixture: tests/web_fixture.c src/web.c $(CORE) build/web_assets.c include/web.h
 	$(HOST_CC) $(HOST_FLAGS) tests/web_fixture.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o $@
 
 build/web_lifecycle: tests/web_lifecycle.c src/web.c $(CORE) build/web_assets.c include/web.h
 	$(HOST_CC) $(HOST_FLAGS) tests/web_lifecycle.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o $@
 
-test: build/test_core build/test_usb build/test_editor build/preview build/web_fixture build/web_lifecycle
+test: build/test_core build/test_usb build/test_editor build/test_media build/preview build/web_fixture build/web_lifecycle
 	./build/test_core
 	./build/test_usb
 	./build/test_editor
+	./build/test_media
 	node tests/test_web.mjs
 	./build/web_lifecycle
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-test-sanitize: build/web_assets.c
+test-sanitize: build/web_assets.c build/media_assets.c
 	@mkdir -p build
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/test_core.c $(CORE) -lm -o build/test_core_sanitize
 	./build/test_core_sanitize
@@ -104,6 +115,8 @@ test-sanitize: build/web_assets.c
 	./build/test_usb_sanitize
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/test_editor.c $(CORE) -lm -o build/test_editor_sanitize
 	./build/test_editor_sanitize
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/test_media.c src/media.c build/media_assets.c -o build/test_media_sanitize
+	./build/test_media_sanitize
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/web_fixture.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o build/web_fixture_sanitize
 	./build/web_fixture_sanitize > /dev/null
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/web_lifecycle.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o build/web_lifecycle_sanitize
@@ -112,6 +125,7 @@ test-sanitize: build/web_assets.c
 	KS_PREVIEW_BINARY=$(CURDIR)/build/preview_sanitize python3 -m unittest discover -s tests -p 'test_http.py' -v
 
 package: build/keyboardsense.elf
+	@mkdir -p dist
 	cp build/keyboardsense.elf dist/keyboardsense.elf
 	cp config/config.ini dist/config.ini
 	cp README.md TESTING.md LICENSE NOTICE dist/
