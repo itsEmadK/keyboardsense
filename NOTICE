@@ -12,3 +12,20 @@ AnyController credits FGG-XSense for discovering the virtual pad interface:
 USB transport research also referenced AnyController's src/transport/usb.c.
 Keyboard/mouse parsing, mappings, configuration, lifecycle, and tests are
 implemented for KeyboardSense. No Sony SDK headers or binaries are included.
+
+Web interface third-party artwork has separate licenses:
+  DualSense: "PS5 Button Icons and Controls" by Zacksly, CC BY 3.0.
+  Source: https://zacksly.itch.io
+  License: https://creativecommons.org/licenses/by/3.0/
+  Modified into sprites by erickdavestech/ps5-dualsense-overlay; sprites reused
+  unmodified. Upstream commit e1de419707860a8da01d3604b0b5632771159756.
+  Original SVG and attribution notice: third_party/dualsense/.
+
+  SVG Keyboard Icons by George Black (2022), MIT.
+  https://github.com/georgemblack/svg-keyboard-icons
+  Upstream commit 714e7848ba82c5c9390cf6ede7a9156c56190b80.
+  Modified by removing key borders/backgrounds for use as keyboard legends.
+  Full notice: third_party/keyboard-icons/LICENSE.md and web/CREDITS.txt.
+
+Coordinate reference: assets/layout.json in ps5-dualsense-overlay (GPL-3.0-or-later).
+Application code remains GPL-3.0-only; the artwork retains the licenses above.

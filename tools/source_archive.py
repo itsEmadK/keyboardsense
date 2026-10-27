@@ -5,7 +5,7 @@ import tarfile
 
 root = pathlib.Path(__file__).resolve().parents[1]
 entries = ['Makefile', 'README.md', 'TESTING.md', 'LICENSE', 'NOTICE', '.gitignore',
-           'include', 'src', 'config', 'tools', 'tests']
+           'include', 'src', 'config', 'tools', 'tests', '.github', 'web', 'third_party']
 with tarfile.open(root / 'dist/keyboardsense-source.tar.gz', 'w:gz') as archive:
     for entry in entries:
         path = root / entry

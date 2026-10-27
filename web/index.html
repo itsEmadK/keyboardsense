@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101313"><link rel="icon" href="data:,">
+<title>KeyboardSense · Input lab</title>
+<link rel="stylesheet" href="/style.css"><script type="module" src="/app.mjs"></script>
+</head>
+<body>
+<div class="app-shell">
+<header class="topbar">
+  <a class="brand" href="/" aria-label="KeyboardSense home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Keyboard<span>Sense</span></a>
+  <nav aria-label="Current view"><span class="nav-active">Input lab</span><span class="version">v0.2.0</span></nav>
+  <div class="connection" id="connection" role="status"><span class="status-dot"></span><span id="connectionText">Connecting</span></div>
+</header>
+<main id="testSurface" tabindex="-1">
+  <section class="page-heading">
+    <div><p class="eyebrow">THE TRANSLATION, IN REAL TIME</p><h1>See every input<span>.</span></h1><p class="intro">Your keyboard on the left. Your DualSense on the right.</p></div>
+    <div class="source-controls"><label class="select-label" for="source">INPUT SOURCE</label><div class="control-row"><select id="source" aria-label="Input source"><option value="live">PS5 live</option><option value="demo">Browser demo</option></select><button class="primary" id="capture" disabled>Loading…</button></div></div>
+  </section>
+  <div class="mode-banner" id="modeBanner" role="status"><span class="banner-icon" aria-hidden="true">↳</span><span id="modeText">Waiting for the payload’s input stream…</span><span class="banner-detail" id="bannerDetail">PORT 1405</span></div>
+  <section class="test-grid" aria-label="Input and controller testing screen">
+    <article class="panel input-panel">
+      <header class="panel-heading"><div class="panel-title"><span class="section-number">01</span><div><p class="eyebrow">PHYSICAL INPUT</p><h2>Keyboard & mouse</h2></div></div><span class="small-badge">ANSI · 104</span></header>
+      <div class="keyboard-scroll"><svg id="keyboard" viewBox="0 0 798 247" role="img" aria-label="Full keyboard; pressed keys highlight in green"></svg></div>
+      <div class="keyboard-legend"><span><i class="legend-dot mapped"></i>Mapped key</span><span><i class="legend-dot pressed"></i>Pressed</span><span class="key-count" id="keyCount">0 keys held</span></div>
+      <div class="input-bottom">
+        <div class="mouse-zone" id="mouseZone" tabindex="0" aria-label="Mouse test area"><svg viewBox="0 0 84 112" class="mouse-art" aria-hidden="true"><path class="mouse-shell" d="M12 43C12 21 23 10 42 10S72 21 72 43v28c0 22-10 32-30 32S12 93 12 71Z"/><path id="mouseLeft" d="M40 12C23 12 14 22 14 43v9h26Z"/><path id="mouseRight" d="M44 12c17 0 26 10 26 31v9H44Z"/><rect id="mouseMiddle" x="37" y="29" width="10" height="20" rx="5"/><path class="mouse-seam" d="M42 12v15M14 55h56"/></svg><div><p class="device-title">Mouse input</p><p id="mouseHint">Click or move here in browser demo</p><div class="mouse-readings"><span>ΔX <b id="mouseDx">0</b></span><span>ΔY <b id="mouseDy">0</b></span><button id="lockMouse" class="text-button">Lock cursor ↗</button></div></div></div>
+        <div class="device-info"><span class="eyebrow">SOURCE DEVICES</span><div id="deviceList">Waiting for input</div></div>
+      </div>
+    </article>
+    <article class="panel output-panel">
+      <header class="panel-heading"><div class="panel-title"><span class="section-number blue">02</span><div><p class="eyebrow">CONTROLLER OUTPUT</p><h2>Virtual DualSense</h2></div></div><span id="outputStatus" class="small-badge">Waiting</span></header>
+      <div class="controller-stage"><div id="controller" class="controller" role="img" aria-label="DualSense output: neutral"></div></div>
+      <div class="axes"><div><span>LEFT STICK</span><strong id="leftAxes">0.00 <i>/</i> 0.00</strong></div><div><span>RIGHT STICK</span><strong id="rightAxes">0.00 <i>/</i> 0.00</strong></div><div class="trigger-readout"><span>TRIGGERS</span><strong><i>L2</i> <b id="l2Value">0%</b><i>R2</i> <b id="r2Value">0%</b></strong></div></div>
+    </article>
+  </section>
+  <section class="lower-grid">
+    <article class="panel signal-panel"><header class="mini-heading"><h2>Signal path</h2><span id="signalState">Ready for input</span></header><div class="signal-path"><div><span class="signal-label">INPUT</span><strong id="inputSignal">Press a key</strong></div><span class="signal-arrow" aria-hidden="true">⟶</span><div><span class="signal-label">MAPPING</span><strong id="mappingSignal">Waiting</strong></div><span class="signal-arrow blue-arrow" aria-hidden="true">⟶</span><div><span class="signal-label">OUTPUT</span><strong id="outputSignal">Neutral</strong></div></div><div class="event-strip" id="eventStrip" aria-label="Recent input history"><span class="empty-events">Recent inputs will appear here.</span></div></article>
+    <article class="panel config-panel"><header class="mini-heading"><h2>Active profile</h2><span class="small-badge">Read only</span></header><dl><div><dt>Sensitivity</dt><dd id="sensitivity">—</dd></div><div><dt>ADS multiplier</dt><dd id="ads">—</dd></div><div><dt>Anti-deadzone</dt><dd id="deadzone">—</dd></div><div><dt>Smoothing</dt><dd id="smoothing">—</dd></div></dl></article>
+  </section>
+  <footer class="footer"><p><span class="status-dot"></span><span id="footerText">Controller emulation · Read-only console telemetry</span></p><div><span>F9 reload</span><span>F10 pause</span><span>F12 stop</span><a href="/CREDITS.txt" target="_blank" rel="noopener">Asset credits ↗</a></div></footer>
+</main>
+</div>
+</body>
+</html>

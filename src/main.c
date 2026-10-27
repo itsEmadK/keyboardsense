@@ -2,6 +2,7 @@
 #include "input.h"
 #include "usb_input.h"
 #include "vpad.h"
+#include "web.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -66,8 +67,12 @@ int main(void)
     bool enabled = true;
     unsigned failures = 0;
     uint64_t next_scan = 0;
+    uint64_t started = now_us(), sequence = 0;
     int result = 0;
-    notify("v0.1.0 running. Plug in USB keyboard/mouse; assign the new controller to your player. F12 stops.");
+    if (ks_web_start(KS_WEB_PORT, false) != 0) {
+        klog_printf("[KeyboardSense] web server start failed errno=%d\n", errno);
+        notify("input active, but web UI could not bind port 1405");
+    } else notify("v0.2.0 running. Test at http://<PS5-IP>:1405/. Assign the new controller to your player. F12 stops.");
     while (running) {
         uint64_t start = now_us();
         if (start >= next_scan) {
@@ -101,10 +106,24 @@ int main(void)
                 result = 1; break;
             }
         } else failures = 0;
+        KsWebSnapshot snapshot = {.keys = keys, .pad = state, .config = config,
+            .mouse_buttons = buttons, .mouse_dx = dx, .mouse_dy = dy,
+            .enabled = enabled, .submit_ok = submit_result == 0,
+            .uptime_us = now_us() - started, .sequence = ++sequence};
+        for (unsigned i = 0; i < KS_DEVICE_LIMIT; ++i) {
+            const KsUsbDevice *d = &usb.devices[i];
+            if (!d->active) continue;
+            KsWebDevice *device = &snapshot.devices[snapshot.device_count++];
+            snprintf(device->name, sizeof(device->name), "%s", d->name);
+            device->protocol = d->iface.protocol;
+            device->interface_number = d->iface.number;
+        }
+        ks_web_publish(&snapshot);
         uint64_t elapsed = now_us() - start;
         if (elapsed < TICK_US) usleep((unsigned)(TICK_US - elapsed));
     }
     ks_vpad_close(&pad);
+    ks_web_stop();
     ks_usb_shutdown(&usb);
     close(lock_fd); /* Keep lock inode; removing it introduces a race. */
     notify("stopped. Replug USB devices to restore native keyboard/mouse handling.");

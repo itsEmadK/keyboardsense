@@ -1,0 +1,39 @@
+DualSense artwork: "PS5 Button Icons and Controls" by Zacksly.
+Source: https://zacksly.itch.io
+License: Creative Commons Attribution 3.0 Unported
+https://creativecommons.org/licenses/by/3.0/
+Modified from the original by erickdavestech/ps5-dualsense-overlay (PNG sprites).
+KeyboardSense reuses those sprites unmodified and animates them in the browser.
+Retrieved from https://github.com/erickdavestech/ps5-dualsense-overlay
+commit e1de419707860a8da01d3604b0b5632771159756.
+Original source SVG and license are in third_party/dualsense/.
+
+Keyboard SVG glyphs: SVG Keyboard Icons by George Black (2022).
+Source: https://github.com/georgemblack/svg-keyboard-icons
+commit 714e7848ba82c5c9390cf6ede7a9156c56190b80. MIT License.
+Modified: removed key borders and empty background fill to use as key legends.
+Full MIT notice is in third_party/keyboard-icons/LICENSE.md.
+
+All KeyboardSense application code: GPL-3.0-only. See LICENSE and NOTICE.
+PlayStation and DualSense are Sony trademarks. No affiliation or endorsement.
+MIT License
+
+Copyright (c) 2022 George Black
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

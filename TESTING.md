@@ -1,6 +1,6 @@
 # Validation record
 
-Date: 2026-10-27. Version: 0.1.0 experimental.
+Date: 2026-10-27. Version: 0.2.0 experimental.
 
 ## Completed locally
 
@@ -8,10 +8,11 @@ Date: 2026-10-27. Version: 0.1.0 experimental.
 - Target compiler/linker: Homebrew LLVM/LLD 23.1.4.
 - PS5 payload SDK: v0.45; archive SHA-256
   `5fac64093d0e3e69f2584ce7935f24f703f622d9681f1495c85b9f00d1291a2c`.
-- `make test`: core input/configuration/descriptor tests, USB simulation, and
-  four Python ELF/sender tests passed.
-- `make test-sanitize`: core and USB simulation passed with AddressSanitizer and
-  UndefinedBehaviorSanitizer, including 20,000 malformed descriptor cases.
+- `make test`: C mapper/configuration/descriptor tests, USB simulation, 1,000 exact C/JS mapper parity frames, web lifecycle tests, and ten
+  Python HTTP/payload/sender tests passed.
+- `make test-sanitize`: core, USB simulation, web serialization/lifecycle, and the
+  live HTTP worker passed under AddressSanitizer and UndefinedBehaviorSanitizer, including 20,000 generated malformed USB
+  descriptor inputs.
 - Target build: all sources compile with `-Wall -Wextra -Werror` and link as a
   PS5 x86-64 ELF. ELF validation checks executable entry mapping and 16-KiB
   segment alignment. SDK `_start` is legitimately at virtual address zero.
@@ -19,8 +20,20 @@ Date: 2026-10-27. Version: 0.1.0 experimental.
   second interface, short key/mouse clicks, modifier keys, held inputs,
   disconnect/reconnect, protocol restoration, and descriptor/fd cleanup.
 
+- Browser QA in the in-app browser: W highlights and moves the left stick;
+  Space lights Cross; release returns to neutral; mouse clicks appear in history;
+  all 104 key elements and controller assets load without broken images or
+  browser console errors. Local-preview and disconnected PS5-live labels were
+  checked. The responsive page had no document overflow at the observed narrow
+  viewport; a desktop view showed keyboard left/controller right.
+- Loopback HTTP tests exercise the same worker linked into the payload, including
+  read-only semantics, content lengths/MIME types, 404s, oversized requests,
+  concurrent assets/state requests, and partial requests that must not block
+  another client. C lifecycle tests check short-tap afterglow and expiry, bounded
+  shutdown with an unfinished request, and clean server restart.
+
 The USB simulation replaces system calls. It does not verify Sony's USB/HID ABI,
-permissions, timing, firmware behavior, or actual device reports.
+permissions, timing, firmware behavior, or actual device reports. Hosted CI has not yet been configured.
 
 ## Console validation — pending
 
@@ -44,6 +57,9 @@ Record these fields for the first hardware test:
 | Short clicks and simultaneous key combinations | Pending |
 | F9 valid/invalid config reload | Pending |
 | F12 cleanup and repeat deployment | Pending |
+| Port 1405 loads from a second LAN device | Pending |
+| Web key highlights match USB input; output matches in-game state | Pending |
+| Web page survives hotplug and F9/F10; closes on F12 | Pending |
 | Second instance rejected while first runs | Pending |
 | Native keyboard/mouse restored after replug | Pending |
 
