@@ -8,15 +8,17 @@
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
 
 #define CLIENTS 8
-#define REQUEST_SIZE 2048
-#define JSON_SIZE 8192
+#define REQUEST_SIZE 16384
+#define JSON_SIZE 12288
 #define CLIENT_TIMEOUT_MS 3000
 
 typedef struct { char *data; size_t capacity, used; bool failed; } Writer;
@@ -69,7 +71,12 @@ int ks_web_json(const KsWebSnapshot *s, bool preview, char *data, size_t capacit
     append(&w, "],\"config\":{\"sensitivity\":%.6f,\"ads_multiplier\":%.6f,\"deadzone\":%.6f,\"smoothing_ms\":%.6f,\"walk_speed\":%.6f,\"invert_y\":%s,\"keys\":[",
         c->sensitivity, c->ads_multiplier, c->deadzone, c->smoothing_ms, c->walk_speed, c->invert_y ? "true" : "false");
     for (unsigned k = 0; k < KS_KEY_COUNT; ++k) append(&w, "%s%u", k ? "," : "", (unsigned)c->keys[k]);
-    append(&w, "],\"mouse\":[%u,%u,%u]}}", (unsigned)c->mouse[0], (unsigned)c->mouse[1], (unsigned)c->mouse[2]);
+    append(&w, "],\"mouse\":[%u,%u,%u]},\"profile\":{\"revision\":%llu,\"title\":", (unsigned)c->mouse[0], (unsigned)c->mouse[1], (unsigned)c->mouse[2],(unsigned long long)s->profile_revision);
+    string(&w,s->title,sizeof(s->title));
+    append(&w,",\"saved\":%s,\"editor_open\":%s,\"native_ready\":%s,\"status\":",s->game_profile?"true":"false",s->editor_open?"true":"false",s->native_ready?"true":"false");
+    string(&w,s->profile_status,sizeof(s->profile_status));
+    append(&w,"},\"command\":{\"id\":%llu,\"status\":%d,\"message\":",(unsigned long long)s->command_id,s->command_status);
+    string(&w,s->command_message,sizeof(s->command_message));append(&w,"}}");
     return w.failed ? -1 : (int)w.used;
 }
 
@@ -77,6 +84,7 @@ typedef struct {
     int fd;
     char request[REQUEST_SIZE], header[512], json[JSON_SIZE];
     size_t received, header_size, header_sent, body_sent, body_size;
+    size_t request_header_size, expected_size;
     const unsigned char *body;
     uint64_t deadline;
     bool responding;
@@ -91,6 +99,9 @@ static struct {
     KsWebSnapshot state;
     uint64_t key_seen[KS_KEY_COUNT], button_seen[32];
     Client clients[CLIENTS];
+    KsWebCommand command;
+    bool pending;
+    uint64_t next_command_id;
 } server = {.listener = -1, .mutex = PTHREAD_MUTEX_INITIALIZER};
 
 static uint64_t milliseconds(void)
@@ -123,23 +134,86 @@ static void error_response(Client *c, unsigned status, const char *reason)
 {
     response(c, status, reason, "text/plain; charset=utf-8", (const unsigned char *)reason, strlen(reason));
 }
+static bool header_value(const Client *c,const char *name,char *out,size_t capacity)
+{
+    const char *p=strstr(c->request,"\r\n");if(!p)return false;
+    p+=2;bool found=false;size_t wanted=strlen(name);
+    while(*p&&p<c->request+c->request_header_size-2){
+        const char *end=strstr(p,"\r\n");if(!end)return false;
+        if((size_t)(end-p)>wanted&&p[wanted]==':'&&!strncasecmp(p,name,wanted)){
+            if(found)return false;
+            const char *v=p+wanted+1;while(v<end&&(*v==' '||*v=='\t'))v++;
+            size_t length=(size_t)(end-v);if(length>=capacity)return false;
+            memcpy(out,v,length);out[length]=0;found=true;
+        }
+        p=end+2;
+    }
+    return found;
+}
+static bool number_line(const char **p,const char *end,const char *key,uint64_t *value)
+{
+    size_t prefix=strlen(key);
+    if((size_t)(end-*p)<=prefix||strncmp(*p,key,prefix))return false;
+    const char *start=*p+prefix,*line=memchr(start,'\n',(size_t)(end-start));
+    if(!line||line==start||line-start>20)return false;
+    uint64_t n=0;
+    for(const char *s=start;s<line;++s){
+        if(*s<'0'||*s>'9'||n>(UINT64_MAX-(unsigned)(*s-'0'))/10)return false;
+        n=n*10+(unsigned)(*s-'0');
+    }
+    *value=n;*p=line+1;return true;
+}
+static void settings_route(Client *c)
+{
+    char value[100];
+    if(!header_value(c,"X-KeyboardSense",value,sizeof(value))||strcmp(value,"editor-v1")||
+       !header_value(c,"Content-Type",value,sizeof(value))||strcmp(value,"application/x-keyboardsense-config")){
+        error_response(c,403,"Editor Header Required");return;
+    }
+    const char *p=c->request+c->request_header_size,*end=c->request+c->expected_size;
+    if(memchr(p,0,(size_t)(end-p))){error_response(c,400,"Invalid Settings");return;}
+    KsWebCommand command={0};uint64_t save;
+    if(!number_line(&p,end,"revision=",&command.revision)||!number_line(&p,end,"save=",&save)||save>2||end-p<7||strncmp(p,"title=",6)){
+        error_response(c,400,"Invalid Settings");return;
+    }
+    p+=6;const char *line=memchr(p,'\n',(size_t)(end-p));
+    if(!line||line-p>=KS_TITLE_SIZE){error_response(c,400,"Invalid Title");return;}
+    memcpy(command.title,p,(size_t)(line-p));p=line+1;command.save=(unsigned)save;
+    if((*command.title&&!ks_title_valid(command.title))||ks_config_parse(p,(size_t)(end-p),&command.config,value,sizeof(value))!=0){
+        error_response(c,400,"Invalid Settings");return;
+    }
+    pthread_mutex_lock(&server.mutex);
+    unsigned failure=0;
+    if(server.pending)failure=503;
+    else if(command.revision!=server.state.profile_revision||strcmp(command.title,server.state.title)||server.state.editor_open)failure=409;
+    else{command.id=++server.next_command_id;server.command=command;server.pending=true;}
+    pthread_mutex_unlock(&server.mutex);
+    if(failure){error_response(c,failure,failure==503?"Editor Busy":"Profile Changed");return;}
+    int n=snprintf(c->json,sizeof(c->json),"{\"id\":%llu}",(unsigned long long)command.id);
+    response(c,202,"Accepted","application/json",(const unsigned char*)c->json,(size_t)n);
+}
 static void route(Client *c)
 {
     /* Parse exactly one bounded request line. Query strings do not affect the
      * resource; no path is translated into a filesystem path. */
     char *line_end = strstr(c->request, "\r\n");
     if (!line_end) { error_response(c, 400, "Bad Request"); return; }
-    *line_end = 0;
     char method[8], path[256], version[16], extra;
-    if (sscanf(c->request, "%7s %255s %15s %c", method, path, version, &extra) != 3 ||
+    char first_line[300];size_t line_size=(size_t)(line_end-c->request);
+    if(line_size>=sizeof(first_line)){error_response(c,400,"Bad Request");return;}
+    memcpy(first_line,c->request,line_size);first_line[line_size]=0;
+    if (sscanf(first_line, "%7s %255s %15s %c", method, path, version, &extra) != 3 ||
         (strcmp(version, "HTTP/1.1") && strcmp(version, "HTTP/1.0"))) {
         error_response(c, 400, "Bad Request"); return;
     }
-    if (strcmp(method, "GET")) { error_response(c, 405, "Method Not Allowed"); return; }
     char *query = strchr(path, '?'); if (query) *query = 0;
-    if (!strcmp(path, "/api/state")) {
+    if(!strcmp(method,"POST")&&!strcmp(path,"/api/config")){settings_route(c);return;}
+    if (strcmp(method, "GET")) { error_response(c, 405, "Method Not Allowed"); return; }
+    if (!strcmp(path, "/api/state")||!strcmp(path,"/api/defaults")||!strcmp(path,"/api/global")) {
         KsWebSnapshot state;
         pthread_mutex_lock(&server.mutex); state = server.state; pthread_mutex_unlock(&server.mutex);
+        if(!strcmp(path,"/api/defaults"))ks_config_defaults(&state.config);
+        if(!strcmp(path,"/api/global"))state.config=state.global_config;
         int n = ks_web_json(&state, server.preview, c->json, sizeof(c->json));
         if (n < 0) error_response(c, 500, "Snapshot Too Large");
         else response(c, 200, "OK", "application/json", (const unsigned char *)c->json, (size_t)n);
@@ -160,8 +234,21 @@ static void receive(Client *c)
         return;
     }
     c->received += (size_t)n; c->request[c->received] = 0;
-    if (strstr(c->request, "\r\n\r\n")) route(c);
-    else if (c->received == sizeof(c->request) - 1) error_response(c, 431, "Request Header Too Large");
+    if(!c->request_header_size){
+        char *end=strstr(c->request,"\r\n\r\n");
+        if(!end){if(c->received>=2048)error_response(c,431,"Request Header Too Large");return;}
+        c->request_header_size=(size_t)(end-c->request)+4;
+        if(c->request_header_size>2048){error_response(c,431,"Request Header Too Large");return;}
+        c->expected_size=c->request_header_size;
+        if(!strncmp(c->request,"POST ",5)){
+            char length[32],encoding[64];
+            if(header_value(c,"Transfer-Encoding",encoding,sizeof(encoding))||!header_value(c,"Content-Length",length,sizeof(length))){error_response(c,400,"Invalid Body Length");return;}
+            char *last;errno=0;unsigned long size=strtoul(length,&last,10);
+            if(errno||!*length||*last||size>12000){error_response(c,413,"Settings Too Large");return;}
+            c->expected_size+=size;
+        }
+    }
+    if(c->received>=c->expected_size)route(c);
 }
 static void transmit(Client *c)
 {
@@ -244,10 +331,11 @@ int ks_web_start(unsigned port, bool preview)
         int saved = errno; close(fd); errno = saved; return -1;
     }
     server.listener = fd; server.port = ntohs(address.sin_port); server.preview = preview;
+    server.pending=false;server.next_command_id=0;
     memset(&server.state, 0, sizeof(server.state));
     memset(server.key_seen, 0, sizeof(server.key_seen));
     memset(server.button_seen, 0, sizeof(server.button_seen));
-    ks_config_defaults(&server.state.config); ks_pad_neutral(&server.state.pad);
+    ks_config_defaults(&server.state.config);server.state.global_config=server.state.config; ks_pad_neutral(&server.state.pad);
     for (unsigned i = 0; i < CLIENTS; ++i) server.clients[i].fd = -1;
     atomic_store(&server.running, true);
     int result = pthread_create(&server.thread, NULL, serve, NULL);
@@ -256,6 +344,13 @@ int ks_web_start(unsigned port, bool preview)
     return 0;
 }
 unsigned ks_web_port(void) { return server.started ? server.port : 0; }
+bool ks_web_take_command(KsWebCommand *out)
+{
+    if(!server.started||pthread_mutex_trylock(&server.mutex)!=0)return false;
+    bool have=server.pending;
+    if(have){*out=server.command;server.pending=false;}
+    pthread_mutex_unlock(&server.mutex);return have;
+}
 void ks_web_publish(const KsWebSnapshot *state)
 {
     if (!server.started) return;

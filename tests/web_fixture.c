@@ -8,7 +8,7 @@ int main(void)
     KsWebSnapshot s = {0}; KsMapper m = {0};
     uint32_t seed = 42;
     uint64_t now = 1000000;
-    const unsigned usages[] = {4,7,8,9,20,21,22,26,40,41,43,44,79,80,81,82,224,225,226};
+    const unsigned usages[] = {4,7,8,9,20,21,22,26,40,41,43,44,79,80,81,82,224,225,226,18,19,13,14};
     for (unsigned frame = 0; frame < 1000; ++frame) {
         bool reset = frame % 100 == 0;
         if (reset) {
@@ -16,6 +16,8 @@ int main(void)
             s.config.smoothing_ms = (frame / 100) % 2 ? 0 : 12;
             s.config.invert_y = (frame / 100) % 3 == 1;
             s.config.sensitivity = 0.25 + (frame / 100) * 0.5;
+            s.config.keys[18]=KS_RS_UP;s.config.keys[19]=KS_RS_DOWN;
+            s.config.keys[13]=KS_RS_LEFT;s.config.keys[14]=KS_RS_RIGHT;
         }
         memset(&s.keys, 0, sizeof(s.keys));
         for (unsigned i = 0; i < sizeof(usages)/sizeof(*usages); ++i) {

@@ -1,0 +1,4 @@
+{
+  global: elf_main;
+  local: *;
+};

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Browser demo of src/input.c; parity-checked against the C implementation.
-export const ACTIONS = ['none','left','right','up','down','walk','cross','circle','square','triangle','l1','r1','l2','r2','l3','r3','dpad_up','dpad_down','dpad_left','dpad_right','options','touchpad','ps','create'];
+export const ACTIONS = ['none','left','right','up','down','walk','cross','circle','square','triangle','l1','r1','l2','r2','l3','r3','dpad_up','dpad_down','dpad_left','dpad_right','options','touchpad','ps','create','rs_left','rs_right','rs_up','rs_down'];
 export const BITS = {l3:2,r3:4,options:8,dpad_up:16,dpad_right:32,dpad_down:64,dpad_left:128,l2:256,r2:512,l1:1024,r1:2048,triangle:4096,circle:8192,cross:16384,square:32768,ps:65536,touchpad:1048576,create:2097152};
 export const neutral = () => ({buttons:0,lx:128,ly:128,rx:128,ry:128,l2:0,r2:0});
 export const createMapper = () => ({filtered_x:0,filtered_y:0,last_motion_us:0,last_tick_us:0,has_motion:false});
@@ -33,6 +33,9 @@ export function mapInput(m,c,keys,mouse,dx,dy,now) {
     const magnitude = c.deadzone + Math.min(1,length)*(1-c.deadzone);
     x = x/length*magnitude; y = y/length*magnitude;
   } else x = y = 0;
+  x += Number(a.has('rs_right'))-Number(a.has('rs_left'));
+  y += Number(a.has('rs_down'))-Number(a.has('rs_up'));
+  length=Math.hypot(x,y);if(length>1){x/=length;y/=length;}
   p.rx = axis(x); p.ry = axis(y);
   return p;
 }

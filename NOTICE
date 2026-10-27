@@ -13,6 +13,26 @@ USB transport research also referenced AnyController's src/transport/usb.c.
 Keyboard/mouse parsing, mappings, configuration, lifecycle, and tests are
 implemented for KeyboardSense. No Sony SDK headers or binaries are included.
 
+Native ShellUI renderer/bootstrap sources in native/ are adapted from:
+  ps5-dualsense-overlay — erickdavestech
+  https://github.com/erickdavestech/ps5-dualsense-overlay
+  commit e1de419707860a8da01d3604b0b5632771159756 (GPL-3.0-or-later)
+  Copyright (C) 2026 porhe911 (Common FPS), khalifa007 (SimpleFPS),
+  and erickdavestech. Original notices remain in the corresponding files.
+  KeyboardSense replaces the display with a settings sidebar and loopback IPC,
+  changes runtime paths, and embeds the renderer in the main payload.
+
+The ptrace/ELF loader helpers in native/shsrv/ are from:
+  https://github.com/ps5-payload-dev/shsrv
+  commit 6f320637d56d344a0e7797753099e33238bbf146 (GPL-3.0-or-later).
+  License and corresponding source are included in native/shsrv/.
+  See native/README.md for integration and lifecycle details.
+
+Running-game app-ID lookup follows the public etaHEN pattern:
+  https://github.com/etaHEN/etaHEN
+  sceSystemServiceGetAppIdOfRunningBigApp + sceKernelGetAppInfo.
+  The bounded kinfo_proc traversal is adapted from the overlay source above.
+
 Web interface third-party artwork has separate licenses:
   DualSense: "PS5 Button Icons and Controls" by Zacksly, CC BY 3.0.
   Source: https://zacksly.itch.io

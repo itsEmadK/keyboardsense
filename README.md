@@ -3,16 +3,19 @@
 A PS5 ELF payload that maps a keyboard and mouse **plugged directly into the
 console** to one virtual DualSense. WASD drives the left stick; mouse movement
 drives the right stick. Games receive controller input, including games without
-native keyboard/mouse support. No PC is needed during play. A read-only testing interface is served by the
-payload at **http://<PS5-IP>:1405/**.
+native keyboard/mouse support. No PC is needed during play. An input lab and settings sidebar are served by
+the payload at **http://<PS5-IP>:1405/**; an experimental native sidebar can
+open over the game with **F8** or **Ctrl+Alt+M**.
 
 **Status: experimental, compiled but not yet tested on a PS5.** The virtual-pad
 ABI comes from [AnyController](https://github.com/BallerIsLeet/AnyController), whose
 author reports testing on firmware **13.60**. KeyboardSense's USB attachment,
 assignment UI, button bits, and behavior in actual games still need console
 validation. Earlier jailbroken firmware up to 13.60 is a desired compatibility
-range, not a verified support claim. There are no firmware-specific memory
-patches or shell injection in this payload.
+range, not a verified support claim. The native sidebar now injects a renderer
+into SceShellUI using public overlay sources. Its bootstrap is gated to firmware
+families **9.60 and 11.00–13.60**, and still needs hardware validation. Other
+firmware keeps the web settings editor available. See `native/README.md`.
 
 ## Requirements and device scope
 
@@ -57,7 +60,7 @@ Use a reasonably low mouse DPI initially; boot reports have 8-bit relative axes.
    controller rather than the virtual one. The physical and virtual controllers
    must not compete for the game's first pad slot.
 5. Test the home screen, then a game. Tune the game's controller sensitivity and
-   the payload's settings together.
+   the payload's settings together, using the sidebar or web editor.
 
 A full reboot requires loading the payload again. Rest-mode survival is not
 verified. If stopped or unable to attach, unplug and reconnect the devices to
@@ -68,7 +71,7 @@ pad. A crash/forced kill may bypass cleanup; reboot if a virtual pad remains.
 
 ## Web input lab (port 1405)
 
-After loading the **v0.2.0** ELF, open `http://<PS5-IP>:1405/` from a browser on
+After loading the **v0.3.0** ELF, open `http://<PS5-IP>:1405/` from a browser on
 its LAN. All HTML, JavaScript, CSS, keyboard glyphs, and controller sprites are
 embedded in the ELF: no CDN, web folder upload, or browser plugin is required.
 
@@ -93,10 +96,12 @@ embedded in the ELF: no CDN, web folder upload, or browser plugin is required.
 
 The HTTP worker is nonblocking, bounds requests/clients/timeouts, and runs on a
 separate thread. Gameplay publishes snapshots with a try-lock rather than waiting
-for browsers. `GET /api/state` is read only; there are no remote-control or config
-mutation endpoints. Anyone on the reachable LAN can view the testing page and its
-key/controller telemetry while the payload is running. F12 shuts down both the
-controller and HTTP listener.
+for browsers. `GET /api/state` is read only. Settings changes use a bounded
+`POST /api/config` queue, a custom header/content type, and a profile revision
+checked again by the input thread. There is no endpoint to inject remote key or
+mouse input. Anyone on the reachable LAN can view telemetry **and change/save
+settings** while the payload runs; this is an unauthenticated LAN interface.
+F12 stops the controller and HTTP listener.
 
 For a local preview without a console (C compiler + Python 3 required):
 
@@ -117,6 +122,69 @@ Artwork was found through web/GitHub research: DualSense sprites from
 (MIT). Full attribution is linked from the page footer and included in the source
 archive. No assets are downloaded by the runtime.
 
+## Sidebar, bindings, and profiles
+
+The right-hand sidebar has **Bindings**, **Mouse**, and **Profiles** tabs, with
+**Apply**, **Save for this game**, and **Cancel** at the bottom. In the web input
+lab, click Settings or press F8 / Ctrl+Alt+M. Opening it stops browser-demo capture.
+
+Bindings work from either end:
+
+- **Controller → Input:** click a DualSense control (or choose its action), then
+  press the desired key or capture a mouse button in the listening box. Adding
+  Z to Cross keeps Space assigned too. Individual binding chips can be removed.
+- **Input → Controller:** select a key on the displayed keyboard, choose an
+  input from the list, or listen for it, then select its DualSense action.
+  If W already drives the left stick, changing it to Cross requires choosing
+  **Replace**; **Keep** preserves its existing mapping.
+
+One input has one action; multiple inputs can share an action. Right-stick
+arrow actions are also bindable. Physical USB/US-QWERTY positions are used.
+Mouse movement remains right-stick emulation; three mouse buttons can be remapped.
+
+**Mouse** exposes hip sensitivity, ADS multiplier, smoothing, anti-deadzone,
+walk speed, and invert Y. Values have sliders and numeric fields in the web UI.
+Changes are drafts until applied or saved. Apply changes the current session;
+Save persists a complete profile. With no game detected, Save writes the global
+profile. Profiles can copy the global settings or reset the draft to defaults.
+
+The payload detects the running game's title ID. It loads
+`/data/keyboardsense/profiles/<TITLE_ID>.ini` when present, otherwise
+`/data/keyboardsense/config.ini`. Changing games closes old drafts and loads the
+new scope; web submissions for an old title/revision are rejected. Each game
+file is a complete snapshot, so later global changes do not merge into it.
+Session-only changes end on profile reload, game change, or payload restart.
+The local preview uses temporary storage and cannot detect a PS5 game.
+
+### Native sidebar on the TV (experimental)
+
+With a game running, give ShellUI/bootstrap time to become ready, then press
+**F8** or **Ctrl+Alt+M** on the PS5 keyboard. The payload only captures menu input
+when the renderer acknowledges readiness. If unavailable, a notification directs
+you to port 1405. No separate homebrew app is required by this implementation.
+
+- **Tab:** switch sections. **Up/Down:** choose a row. **Left/Right:** adjust a
+  mouse setting. The mouse moves a cursor; click tabs, rows, or footer buttons.
+- **F2:** toggle binding direction. Controller-first: select an action and press
+  Enter, release activation keys, then press the desired input. Input-first:
+  press Enter to listen, press the input, choose its action, then Enter to assign.
+- A conflict requires **Enter** to replace or **Escape** to keep the old binding.
+  **Backspace** unbinds the selected input. **F8** closes capture/menu.
+- **F5:** Apply. **F6:** Save to this game (global if no title). **Escape:** Cancel.
+  During capture Escape itself can be bound; use F8 to exit capture.
+
+Game input is neutral while the native sidebar is open and until held inputs
+are released after it closes. **The game itself is not paused**. A game change
+or lost renderer heartbeat discards the draft and releases capture. Do not edit
+from the TV and web simultaneously; the backend rejects conflicting drafts.
+
+The renderer hooks SceShellUI's Mono/PUI update method. Do not run it alongside
+Common FPS, SimpleFPS, or another DualSense overlay that hooks the same method.
+After F12, the renderer stays resident and hides on heartbeat expiry. Reboot
+before loading a changed renderer or another overlay. Shutdown can wait roughly
+a minute for an in-progress bootstrap transaction to finish restoring ShellUI.
+These lifecycle behaviors require console validation, just like the USB backend.
+
 ## Default controls
 
 | Input | DualSense |
@@ -132,7 +200,8 @@ archive. No assets are downloaded by the runtime.
 | Left Alt | Walk (45% stick deflection) |
 | Arrow keys | D-pad |
 | Enter / Tab / Escape | Options / Touchpad click / PS |
-| F9 | Reload configuration |
+| F8 / Ctrl+Alt+M | Open/close native sidebar |
+| F9 | Reload global/current-game configuration |
 | F10 | Pause/resume virtual input (pause sends neutral) |
 | F12 | Stop and remove the virtual controller |
 
@@ -176,13 +245,16 @@ localized characters. Names/values are case sensitive. Available keys: `a`–`z`
 `leftbracket`, `rightbracket`, `backslash`, `semicolon`, `apostrophe`, `grave`,
 `comma`, `period`, `slash`, `capslock`, `insert`, `home`, `pageup`, `delete`, `end`,
 `pagedown`, `up`, `down`, `left`, `right`, `leftctrl`, `leftshift`, `leftalt`,
-`leftmeta`, `rightctrl`, `rightshift`, `rightalt`, `rightmeta`, `f1`–`f8`, `f11`,
-`mouse_left`, `mouse_right`, `mouse_middle`. F9/F10/F12 are reserved.
+`leftmeta`, `rightctrl`, `rightshift`, `rightalt`, `rightmeta`, `f1`–`f7`, `f11`,
+`mouse_left`, `mouse_right`, `mouse_middle`. `usb_XX` accepts other physical HID
+usage IDs (hex), including numpad keys. F8/F9/F10/F12 are reserved; configurations
+that bind them are rejected. The Ctrl+Alt+M chord is consumed as a shortcut.
 
 Actions: `none`, `left`, `right`, `up`, `down`, `walk`, `cross`, `circle`, `square`,
 `triangle`, `l1`, `r1`, `l2`, `r2`, `l3`, `r3`, `dpad_up`, `dpad_down`, `dpad_left`,
-`dpad_right`, `options`, `touchpad`, `ps`, `create`. Movement actions drive the
-left stick; `dpad_*` actions drive the D-pad. Triggers are digital 0/255.
+`dpad_right`, `options`, `touchpad`, `ps`, `create`, `rs_left`, `rs_right`,
+`rs_up`, `rs_down`. Movement actions drive the left stick; `rs_*` drives the
+right stick, combined with mouse output and normalized; `dpad_*` drives the D-pad. Triggers are digital 0/255.
 
 ## Build and test
 
@@ -223,19 +295,27 @@ normalization, opposing keys, trigger bits, ADS sensitivity, inversion, idle
 recentering, transactional configuration reload, composite USB descriptors,
 20,000 malformed descriptor cases, composite-interface attach/retry and hotplug
 simulation, short clicks, ELF validation, and the sender. Web tests additionally cover all 104 keys, 1,000 exact C/JS mapper
-parity frames, JSON bounds/escaping, real HTTP requests, slow/parallel clients,
-short-tap afterglow, shutdown, and restart. These checks
+parity frames (including digital right-stick bindings), JSON bounds/escaping,
+real HTTP requests, slow/parallel clients, short-tap afterglow, shutdown, and
+restart. Editor tests cover both binding directions, alias preservation, conflict
+confirmation, per-game/global saves, cancellation, stale revisions, renderer
+loss, reserved keys, and settings validation. The native renderer build also
+checks its shared-ELF entry, imports, relocations, and initializer contract. These checks
 cannot establish that Sony's USB/HID ioctls work on a particular firmware.
 
 Before claiming console support, record firmware + HEN, device models, klog,
 assignment behavior, and results in at least one PS5 game. Check short clicks,
 held movement, mouse stop/reversal, unplug/replug while holding inputs, F9/F10/F12,
-and loading a second instance. See `TESTING.md` for the current validation record.
+and loading a second instance. Also validate title changes, native rendering,
+binding capture, conflict/cancel flows, saves surviving restart, and loss of
+renderer readiness. See `TESTING.md` for the current validation record.
 
 ## License and attribution
 
 Application code: GPL-3.0-only. Third-party artwork retains its CC BY 3.0 and
 MIT licenses; see `web/CREDITS.txt`, `third_party/`, `LICENSE`, and `NOTICE`. The virtual-pad ABI is adapted from
-AnyController (commit recorded in `NOTICE`), which credits FGG-XSense. Ghostpad
+AnyController (commit recorded in `NOTICE`), which credits FGG-XSense. Native
+renderer sources and shsrv helpers retain GPL-3.0-or-later notices; see
+`native/README.md` and included licenses. Ghostpad
 and PS5 DevLoop provided research context for controller assignment and game
 input behavior. Not affiliated with Sony.

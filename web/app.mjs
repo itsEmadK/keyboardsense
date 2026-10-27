@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {ACTIONS,BITS,neutral,createMapper,mapInput} from './mapper.mjs';
 import {KEYS,BY_CODE,BY_USAGE} from './keyboard.mjs';
+import {mountSettings} from './settings.mjs';
 const $ = id => document.getElementById(id);
 const svgNode = (tag,attrs={}) => {
   const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
@@ -9,6 +10,7 @@ const svgNode = (tag,attrs={}) => {
 };
 const LABELS = {none:'Unbound',left:'LS ←',right:'LS →',up:'LS ↑',down:'LS ↓',walk:'Walk',cross:'Cross ×',circle:'Circle ○',square:'Square □',triangle:'Triangle △',dpad_up:'D-pad ↑',dpad_down:'D-pad ↓',dpad_left:'D-pad ←',dpad_right:'D-pad →',options:'Options',touchpad:'Touchpad',ps:'PS',create:'Create'};
 const label = action => LABELS[action] || action?.toUpperCase() || 'Unbound';
+let settings=null;
 const keyNodes=new Map();
 for(const k of KEYS) {
   const w=k.w*34-3,h=k.h*34-3;
@@ -50,6 +52,7 @@ function resetInputs() {
   pressed.clear();simulated.clear();browserMouse=0;pendingX=pendingY=0;mapper=createMapper();
 }
 function setCapture(value) {
+  if(value&&settings?.isOpen())return;
   capturing=value && mode==='demo' && !!config;
   resetInputs();
   if(capturing)demoEnabled=true;
@@ -63,7 +66,7 @@ function setMode(value) {
   updateSourceUI();
 }
 function updateSourceUI() {
-  $('capture').disabled = !config || mode==='live';
+  $('capture').disabled = !config || mode==='live'||!!settings?.isOpen();
   $('capture').textContent = mode==='live'?'Watching console':capturing?'Stop test':'Start test';
   $('capture').classList.toggle('capturing',capturing);
   $('lockMouse').hidden = mode!=='demo';
@@ -75,10 +78,10 @@ function updateSourceUI() {
     isReal&&!stale?'PS5 live · Reading console USB input and the virtual controller state submitted by the payload.':
     snapshot?.source==='preview'?'No PS5 is connected to this local preview. Select Browser demo to test here.':
     stale?'Input stream stalled. Waiting for the payload…':'Console disconnected. Waiting for the payload on port 1405…';
-  $('bannerDetail').textContent = mode==='demo'?(capturing?'CAPTURE ACTIVE':'LOCAL PREVIEW'):'READ ONLY · :1405';
+  $('bannerDetail').textContent = mode==='demo'?(capturing?'CAPTURE ACTIVE':'LOCAL PREVIEW'):'USB INPUT · :1405';
   $('connection').dataset.state = connected?'ready':'error';
   $('connectionText').textContent = connected?(snapshot?.source==='ps5'?'Payload connected':'Local preview'):'Server disconnected';
-  $('footerText').textContent = mode==='demo'?'Browser simulation · Click Stop test to release input':'Controller emulation · Console telemetry is visible on your LAN';
+  $('footerText').textContent = mode==='demo'?'Browser simulation · Click Stop test to release input':'Controller telemetry · F8 / Ctrl + Alt + M opens settings';
 }
 function applyConfig(next) {
   const signature=JSON.stringify(next);if(signature===configSignature)return;
@@ -110,6 +113,7 @@ async function poll() {
     snapshot=next;connected=true;lastLiveAt=performance.now();
     if(next.sequence!==lastSequence){lastSequence=next.sequence;sequenceChanged=lastLiveAt;}
     applyConfig(next.config);
+    settings?.update(next);
     if(!manualSource && next.source==='preview' && mode!=='demo')setMode('demo');
     updateSourceUI();
   } catch {connected=false;updateSourceUI();}
@@ -226,4 +230,5 @@ $('lockMouse').addEventListener('click',async()=>{
   try{await $('mouseZone').requestPointerLock();}catch{$('mouseHint').textContent='Cursor lock unavailable. Move inside this area.';}
 });
 document.addEventListener('pointerlockchange',()=>{browserMouse=0;pendingX=pendingY=0;mapper=createMapper();});
+settings=mountSettings({getConfig:()=>config,getProfile:()=>snapshot?.profile,getSource:()=>snapshot?.source,isCapturing:()=>capturing,onOpen:()=>setCapture(false),onApplied:next=>{applyConfig(next);mapper=createMapper();}});
 poll();requestAnimationFrame(tick);

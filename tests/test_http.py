@@ -5,6 +5,7 @@ import os
 import pathlib
 import socket
 import subprocess
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -95,3 +96,73 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(len(results), 6)
         for headers, body in results:
             self.assertEqual(int(headers['Content-Length']), len(body))
+
+    def post_config(self, revision, text, save=0, title='', editor_header=True):
+        body = f'revision={revision}\nsave={save}\ntitle={title}\n{text}'.encode()
+        headers = {'Content-Type': 'application/x-keyboardsense-config'}
+        if editor_header:
+            headers['X-KeyboardSense'] = 'editor-v1'
+        request = urllib.request.Request(self.url + '/api/config', data=body, method='POST', headers=headers)
+        with urllib.request.urlopen(request, timeout=4) as response:
+            self.assertEqual(response.status, 202)
+            return json.loads(response.read())['id']
+
+    def await_command(self, request_id):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            _, body = self.get('/api/state')
+            state = json.loads(body)
+            if state['command']['id'] == request_id:
+                return state
+            time.sleep(.01)
+        self.fail('input thread did not acknowledge settings')
+
+    def test_configuration_apply_save_and_rejection(self):
+        _, body = self.get('/api/state')
+        initial = json.loads(body)
+        old_revision = initial['profile']['revision']
+        self.assertGreater(old_revision, 0)
+        request_id = self.post_config(old_revision, 'sensitivity=2.4\nbind.usb_1d=cross\n')
+        state = self.await_command(request_id)
+        self.assertEqual(state['command']['status'], 0)
+        self.assertEqual(state['config']['sensitivity'], 2.4)
+        self.assertEqual(state['config']['keys'][29], 6)
+        self.assertEqual(state['config']['keys'][44], 6)  # preserve default alias
+        _, body = self.get('/api/global')
+        self.assertEqual(json.loads(body)['config']['sensitivity'], 1)
+        request_id = self.post_config(state['profile']['revision'], 'sensitivity=2.4\n', save=1)
+        state = self.await_command(request_id)
+        self.assertEqual(state['command']['status'], 0)
+        _, body = self.get('/api/global')
+        self.assertEqual(json.loads(body)['config']['sensitivity'], 2.4)
+        for revision, text, title, header, status in [
+            (old_revision, 'sensitivity=1\n', '', True, 409),
+            (state['profile']['revision'], 'sensitivity=nan\n', '', True, 400),
+            (state['profile']['revision'], 'sensitivity=1\n', '../bad', True, 400),
+            (state['profile']['revision'], 'sensitivity=1\n', '', False, 403),
+            (state['profile']['revision'], 'bind.usb_41=cross\n', '', True, 400),
+        ]:
+            with self.subTest(text=text, status=status), self.assertRaises(urllib.error.HTTPError) as error:
+                self.post_config(revision, text, title=title, editor_header=header)
+            self.assertEqual(error.exception.code, status)
+            error.exception.close()
+        _, body = self.get('/api/state')
+        self.assertEqual(json.loads(body)['config']['sensitivity'], 2.4)
+
+    def test_fragmented_settings_body_does_not_block_telemetry(self):
+        _, body = self.get('/api/state')
+        revision = json.loads(body)['profile']['revision']
+        data = f'revision={revision}\nsave=0\ntitle=\nsensitivity=1.7\n'.encode()
+        header = (f'POST /api/config HTTP/1.1\r\nHost: localhost\r\nX-KeyboardSense: editor-v1\r\n'
+                  f'Content-Type: application/x-keyboardsense-config\r\nContent-Length: {len(data)}\r\n\r\n').encode()
+        with socket.create_connection(('127.0.0.1', self.port), timeout=4) as connection:
+            connection.sendall(header + data[:5])
+            _, body = self.get('/api/state')
+            self.assertEqual(json.loads(body)['source'], 'preview')
+            connection.sendall(data[5:])
+            response = b''
+            while chunk := connection.recv(4096):
+                response += chunk
+            self.assertIn(b'202 Accepted', response)
+            request_id = json.loads(response.split(b'\r\n\r\n', 1)[1])['id']
+            self.assertEqual(self.await_command(request_id)['command']['status'], 0)

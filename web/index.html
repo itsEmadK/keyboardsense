@@ -10,13 +10,13 @@
 <div class="app-shell">
 <header class="topbar">
   <a class="brand" href="/" aria-label="KeyboardSense home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Keyboard<span>Sense</span></a>
-  <nav aria-label="Current view"><span class="nav-active">Input lab</span><span class="version">v0.2.0</span></nav>
+  <nav aria-label="Current view"><span class="nav-active">Input lab</span><span class="version">v0.3.0</span></nav>
   <div class="connection" id="connection" role="status"><span class="status-dot"></span><span id="connectionText">Connecting</span></div>
 </header>
 <main id="testSurface" tabindex="-1">
   <section class="page-heading">
     <div><p class="eyebrow">THE TRANSLATION, IN REAL TIME</p><h1>See every input<span>.</span></h1><p class="intro">Your keyboard on the left. Your DualSense on the right.</p></div>
-    <div class="source-controls"><label class="select-label" for="source">INPUT SOURCE</label><div class="control-row"><select id="source" aria-label="Input source"><option value="live">PS5 live</option><option value="demo">Browser demo</option></select><button class="primary" id="capture" disabled>Loading…</button></div></div>
+    <div class="source-controls"><label class="select-label" for="source">INPUT SOURCE</label><div class="control-row"><select id="source" aria-label="Input source"><option value="live">PS5 live</option><option value="demo">Browser demo</option></select><button class="primary" id="capture" disabled>Loading…</button><button class="secondary" id="openSettings" disabled>Settings</button></div></div>
   </section>
   <div class="mode-banner" id="modeBanner" role="status"><span class="banner-icon" aria-hidden="true">↳</span><span id="modeText">Waiting for the payload’s input stream…</span><span class="banner-detail" id="bannerDetail">PORT 1405</span></div>
   <section class="test-grid" aria-label="Input and controller testing screen">
@@ -37,10 +37,34 @@
   </section>
   <section class="lower-grid">
     <article class="panel signal-panel"><header class="mini-heading"><h2>Signal path</h2><span id="signalState">Ready for input</span></header><div class="signal-path"><div><span class="signal-label">INPUT</span><strong id="inputSignal">Press a key</strong></div><span class="signal-arrow" aria-hidden="true">⟶</span><div><span class="signal-label">MAPPING</span><strong id="mappingSignal">Waiting</strong></div><span class="signal-arrow blue-arrow" aria-hidden="true">⟶</span><div><span class="signal-label">OUTPUT</span><strong id="outputSignal">Neutral</strong></div></div><div class="event-strip" id="eventStrip" aria-label="Recent input history"><span class="empty-events">Recent inputs will appear here.</span></div></article>
-    <article class="panel config-panel"><header class="mini-heading"><h2>Active profile</h2><span class="small-badge">Read only</span></header><dl><div><dt>Sensitivity</dt><dd id="sensitivity">—</dd></div><div><dt>ADS multiplier</dt><dd id="ads">—</dd></div><div><dt>Anti-deadzone</dt><dd id="deadzone">—</dd></div><div><dt>Smoothing</dt><dd id="smoothing">—</dd></div></dl></article>
+    <article class="panel config-panel"><header class="mini-heading"><h2>Active profile</h2><span class="small-badge">F8 to edit</span></header><dl><div><dt>Sensitivity</dt><dd id="sensitivity">—</dd></div><div><dt>ADS multiplier</dt><dd id="ads">—</dd></div><div><dt>Anti-deadzone</dt><dd id="deadzone">—</dd></div><div><dt>Smoothing</dt><dd id="smoothing">—</dd></div></dl></article>
   </section>
   <footer class="footer"><p><span class="status-dot"></span><span id="footerText">Controller emulation · Read-only console telemetry</span></p><div><span>F9 reload</span><span>F10 pause</span><span>F12 stop</span><a href="/CREDITS.txt" target="_blank" rel="noopener">Asset credits ↗</a></div></footer>
 </main>
 </div>
+<aside id="settingsDrawer" class="settings-drawer" role="dialog" aria-modal="false" aria-labelledby="settingsHeading" hidden>
+  <header class="drawer-header"><div><p class="eyebrow">KEYBOARDSENSE · CONTROL EDITOR</p><h2 id="settingsHeading">Make it yours<span>.</span></h2></div><button class="icon-button" id="closeSettings" aria-label="Close settings">×</button></header>
+  <div class="drawer-profile"><span class="profile-icon">▣</span><div><strong id="settingsTitle">Global default</strong><p id="settingsScope">Current profile</p></div><span id="draftState" class="small-badge">No changes</span></div>
+  <div class="editor-tabs" role="tablist" aria-label="Settings sections"><button id="tab-bindings" role="tab" aria-selected="true" aria-controls="editor-bindings">Bindings</button><button id="tab-mouse" role="tab" aria-selected="false" aria-controls="editor-mouse">Mouse</button><button id="tab-profiles" role="tab" aria-selected="false" aria-controls="editor-profiles">Profiles</button></div>
+  <div class="drawer-body">
+    <section id="editor-bindings" role="tabpanel" aria-labelledby="tab-bindings">
+      <div class="binding-direction"><button id="controllerDirection" aria-pressed="true">Controller → Input</button><button id="inputDirection" aria-pressed="false">Input → Controller</button></div>
+      <p class="editor-description">Start from either end. Choose a controller action, or select the key you want to use.</p>
+      <div class="binding-controller" id="bindingController"><img src="/assets/dualsense/base_full.png" alt="Select a DualSense action to map it"></div>
+      <div id="axisBindings" class="axis-bindings"></div>
+      <div id="inputFirstControls" class="editor-field" hidden><label for="inputSelect">KEYBOARD / MOUSE INPUT</label><select id="inputSelect"></select></div>
+      <div class="editor-field"><label for="actionSelect">CONTROLLER ACTION</label><select id="actionSelect"></select></div>
+      <div class="capture-prompt"><span class="capture-dot"></span><div><strong id="selectedInputName">Space</strong><p id="bindingPrompt">Choose a controller action</p></div><button class="secondary" id="listenInput">Listen for input</button></div>
+      <div id="captureMouseBinding" class="mouse-binding-box" tabindex="0">Click here to capture a mouse button while listening</div>
+      <div class="existing-bindings"><p class="eyebrow" id="actionBindingsTitle">ASSIGNED INPUTS</p><div id="existingBindings"></div></div>
+      <div class="conflict-box" id="conflictBox" role="alert" hidden><p id="conflictText"></p><button id="replaceBinding">Replace binding</button><button id="keepBinding">Keep existing</button></div>
+    </section>
+    <section id="editor-mouse" role="tabpanel" aria-labelledby="tab-mouse" hidden><p class="editor-description">Tune your aim for this game. Changes take effect only when you apply or save.</p><div class="sensitivity-note"><span>↗</span><div><strong>Mouse → right stick</strong><p>The game’s controller turn-speed limit still applies.</p></div></div><div id="mouseSettings"></div><label class="invert-setting" for="setting-invert_y"><span>Invert vertical aim<small>Reverse the mouse Y axis</small></span><input type="checkbox" id="setting-invert_y"></label></section>
+    <section id="editor-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden><p class="editor-description">A profile follows the game’s title ID. Games without a saved profile inherit your global defaults.</p><div class="profile-detail"><span class="eyebrow">CURRENT GAME</span><strong id="profileTitle">No game detected</strong><p id="profileSource">Global defaults</p></div><button class="profile-action" id="copyGlobal"><span>Copy global settings into draft</span><span>↗</span></button><button class="profile-action" id="resetDraft"><span>Reset draft to factory defaults</span><span>↺</span></button><button class="profile-action" id="saveGlobal"><span>Save draft as global default</span><span>↓</span></button><p class="profile-help">Applying changes updates this session. Saving for the current game remembers bindings and sensitivity for the next launch.</p></section>
+  </div>
+  <div class="editor-message" id="editorMessage" role="status">Changes stay in the draft until applied.</div>
+  <footer class="drawer-footer"><button class="text-button" id="cancelSettings">Cancel</button><button class="secondary" id="applySettings">Apply</button><button class="primary" id="saveSettings">Save for this game</button></footer>
+  <p class="drawer-shortcuts">F8 / Ctrl + Alt + M · Open sidebar <span>Esc · Cancel</span></p>
+</aside>
 </body>
 </html>

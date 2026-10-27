@@ -14,7 +14,8 @@ typedef enum {
     KS_CROSS, KS_CIRCLE, KS_SQUARE, KS_TRIANGLE,
     KS_L1, KS_R1, KS_L2, KS_R2, KS_L3, KS_R3,
     KS_DPAD_UP, KS_DPAD_DOWN, KS_DPAD_LEFT, KS_DPAD_RIGHT,
-    KS_OPTIONS, KS_TOUCHPAD, KS_PS, KS_CREATE, KS_ACTION_COUNT
+    KS_OPTIONS, KS_TOUCHPAD, KS_PS, KS_CREATE,
+    KS_RS_LEFT, KS_RS_RIGHT, KS_RS_UP, KS_RS_DOWN, KS_ACTION_COUNT
 } KsAction;
 
 typedef struct {
@@ -47,5 +48,9 @@ void ks_map(KsMapper *, const KsConfig *, const KsKeyboard *, uint8_t mouse_butt
 void ks_config_defaults(KsConfig *);
 /* All-or-nothing configuration: on any error, out is left unchanged. */
 int ks_config_load(const char *path, KsConfig *out, char *error, size_t error_size);
+int ks_config_parse(const char *text, size_t length, KsConfig *, char *error, size_t);
+int ks_config_format(const KsConfig *, char *, size_t);
+int ks_config_save(const char *path, const KsConfig *, char *error, size_t);
+bool ks_key_reserved(unsigned usage);
 const char *ks_action_name(KsAction);
 #endif

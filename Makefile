@@ -2,9 +2,12 @@
 .DEFAULT_GOAL := all
 HOST_CC ?= cc
 HOST_FLAGS = -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude -g
-CORE = src/input.c src/config.c src/usb_descriptors.c
-SOURCES = $(CORE) src/main.c src/usb_input.c src/vpad.c src/web.c
-OBJECTS = $(SOURCES:src/%.c=build/ps5/%.o) build/ps5/web_assets.o
+CORE = src/input.c src/config.c src/usb_descriptors.c src/editor.c
+SOURCES = $(CORE) src/main.c src/usb_input.c src/vpad.c src/web.c src/game_ps5.c
+NATIVE_CPP = native/overlay_bridge.cpp native/shellui_injector.cpp native/stable_shellui_injector.cpp native/remote_call.cpp native/shellui_hook_controller.cpp native/stable_sampler/proc_rw_v960.cpp
+NATIVE_C = native/stable_elfldr_bridge.c native/shsrv/pt.c
+NATIVE_OBJECTS = $(NATIVE_CPP:%.cpp=build/%.o) $(NATIVE_C:%.c=build/%.o) build/native/renderer_blob.o
+OBJECTS = $(SOURCES:src/%.c=build/ps5/%.o) build/ps5/web_assets.o $(NATIVE_OBJECTS)
 WEB_FILES = $(wildcard web/* web/assets/keys/* web/assets/dualsense/* web/assets/dualsense/pressed/*)
 
 # Host tests and cleanup do not require a PS5 SDK.
@@ -16,7 +19,8 @@ include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
 endif
 
 CFLAGS += -std=c11 -Wall -Wextra -Werror -O2 -Iinclude -MMD -MP
-LDFLAGS += -lkernel_sys -lpthread
+LDFLAGS += -lkernel_sys -lpthread -lSceSystemService
+NATIVE_FLAGS = -Iinclude -Inative -Inative/shsrv -DPS5 -DCOMMON_FPS_DIAGNOSTIC_SYSCTL_ONLY=1 -DCOMMON_FPS_V121=1 -O2 -fPIC -fvisibility=hidden -ffunction-sections -fdata-sections -MMD -MP
 
 .PHONY: all test test-sanitize clean package send preview
 all: build/keyboardsense.elf
@@ -26,7 +30,33 @@ build/ps5/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build/keyboardsense.elf: $(OBJECTS)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+build/native/%.o: native/%.cpp
+	@mkdir -p $(@D)
+	$(CXX) -std=c++20 -fno-exceptions -fno-rtti $(NATIVE_FLAGS) -c $< -o $@
+
+build/native/%.o: native/%.c
+	@mkdir -p $(@D)
+	$(CC) -std=c11 $(NATIVE_FLAGS) -c $< -o $@
+
+build/native/editor_renderer.o: src/editor.c
+	@mkdir -p $(@D)
+	$(CC) -std=c11 $(NATIVE_FLAGS) -c $< -o $@
+
+build/native/config_renderer.o: src/config.c
+	@mkdir -p $(@D)
+	$(CC) -std=c11 $(NATIVE_FLAGS) -c $< -o $@
+
+build/sidebar_renderer.elf: build/native/sidebar_renderer.o build/native/sidebar_entry.o build/native/editor_renderer.o build/native/config_renderer.o native/renderer.exports tools/check_renderer.py
+	$(CXX) -shared -nostartfiles -nostdlib++ -Wl,-Bsymbolic,-e,elf_main,--hash-style=sysv,-z,now,-z,undefs,--gc-sections,--version-script=native/renderer.exports -o $@ $(filter %.o,$^) -lkernel_sys -lSceLibcInternal -lSceNet
+	python3 tools/check_renderer.py $@
+
+build/renderer_blob.cpp: build/sidebar_renderer.elf tools/embed_renderer.py
+	python3 tools/embed_renderer.py $< $@
+
+build/native/renderer_blob.o: build/renderer_blob.cpp
+	$(CXX) -std=c++20 $(NATIVE_FLAGS) -c $< -o $@
 
 build/web_assets.c: tools/embed_web.py $(WEB_FILES)
 	python3 tools/embed_web.py $@
@@ -49,15 +79,19 @@ build/test_usb: tests/test_usb.c src/usb_input.c $(CORE) include/usb_input.h tes
 	@mkdir -p $(@D)
 	$(HOST_CC) -Itests/stubs $(HOST_FLAGS) tests/test_usb.c src/usb_input.c $(CORE) -lm -o $@
 
+build/test_editor: tests/test_editor.c $(CORE) include/editor.h
+	$(HOST_CC) $(HOST_FLAGS) tests/test_editor.c $(CORE) -lm -o $@
+
 build/web_fixture: tests/web_fixture.c src/web.c $(CORE) build/web_assets.c include/web.h
 	$(HOST_CC) $(HOST_FLAGS) tests/web_fixture.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o $@
 
 build/web_lifecycle: tests/web_lifecycle.c src/web.c $(CORE) build/web_assets.c include/web.h
 	$(HOST_CC) $(HOST_FLAGS) tests/web_lifecycle.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o $@
 
-test: build/test_core build/test_usb build/preview build/web_fixture build/web_lifecycle
+test: build/test_core build/test_usb build/test_editor build/preview build/web_fixture build/web_lifecycle
 	./build/test_core
 	./build/test_usb
+	./build/test_editor
 	node tests/test_web.mjs
 	./build/web_lifecycle
 	python3 -m unittest discover -s tests -p 'test_*.py' -v
@@ -68,6 +102,8 @@ test-sanitize: build/web_assets.c
 	./build/test_core_sanitize
 	$(HOST_CC) -Itests/stubs $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/test_usb.c src/usb_input.c $(CORE) -lm -o build/test_usb_sanitize
 	./build/test_usb_sanitize
+	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/test_editor.c $(CORE) -lm -o build/test_editor_sanitize
+	./build/test_editor_sanitize
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/web_fixture.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o build/web_fixture_sanitize
 	./build/web_fixture_sanitize > /dev/null
 	$(HOST_CC) $(HOST_FLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer tests/web_lifecycle.c src/web.c $(CORE) build/web_assets.c -pthread -lm -o build/web_lifecycle_sanitize
@@ -91,4 +127,4 @@ send: build/keyboardsense.elf
 clean:
 	rm -rf build
 
--include $(OBJECTS:.o=.d)
+-include $(OBJECTS:.o=.d) build/native/sidebar_renderer.d build/native/sidebar_entry.d build/native/editor_renderer.d build/native/config_renderer.d

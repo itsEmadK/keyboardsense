@@ -3,6 +3,9 @@
 #include "usb_input.h"
 #include "vpad.h"
 #include "web.h"
+#include "editor.h"
+#include "game.h"
+#include "overlay.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -13,7 +16,6 @@
 #include <unistd.h>
 #include <ps5/klog.h>
 
-#define CONFIG_PATH "/data/keyboardsense/config.ini"
 #define TICK_US 4000
 #define USB_SCAN_US 1000000
 #define KEY_F9 0x42
@@ -48,11 +50,9 @@ int main(void)
         if (lock_fd >= 0) close(lock_fd);
         return 1;
     }
-    KsConfig config;
-    ks_config_defaults(&config);
-    char error[200];
-    if (access(CONFIG_PATH, F_OK) == 0 && ks_config_load(CONFIG_PATH, &config, error, sizeof(error)) != 0)
-        notify(error);
+    KsEditor editor;
+    if(ks_editor_init(&editor,"/data/keyboardsense")!=0){notify("cannot initialize profile directory");close(lock_fd);return 1;}
+    if(*editor.status)notify(editor.status);
     KsVpad pad = {.fd = -1, .handle = -1};
     if (ks_vpad_open(&pad) != 0) {
         klog_printf("[KeyboardSense] virtual DualSense creation failed errno=%d\n", errno);
@@ -68,15 +68,22 @@ int main(void)
     unsigned failures = 0;
     uint64_t next_scan = 0;
     uint64_t started = now_us(), sequence = 0;
+    uint64_t mapped_revision=editor.revision,last_command=0;
+    int command_status=0;char command_message[128]="";
     int result = 0;
+    if(ks_overlay_start()!=0)klog_printf("[KeyboardSense] Native sidebar unavailable errno=%d; web editor remains available\n",errno);
     if (ks_web_start(KS_WEB_PORT, false) != 0) {
         klog_printf("[KeyboardSense] web server start failed errno=%d\n", errno);
         notify("input active, but web UI could not bind port 1405");
-    } else notify("v0.2.0 running. Test at http://<PS5-IP>:1405/. Assign the new controller to your player. F12 stops.");
+    } else notify("v0.3.0 running. F8 / Ctrl+Alt+M: sidebar. Settings at http://<PS5-IP>:1405/. F12 stops.");
     while (running) {
         uint64_t start = now_us();
         if (start >= next_scan) {
             if (ks_usb_scan(&usb)) ks_mapper_reset(&mapper);
+            KsGame game;
+            int discovered=ks_game_query(&game);
+            ks_overlay_game(discovered==1?game.pid:-1);
+            ks_editor_game(&editor,discovered==1?game.title:"");
             next_scan = now_us() + USB_SCAN_US;
         }
         KsKeyboard keys;
@@ -84,18 +91,29 @@ int main(void)
         int dx, dy;
         if (ks_usb_poll(&usb, &keys, &buttons, &dx, &dy)) ks_mapper_reset(&mapper);
         if (keys.keys[KEY_F12]) break;
-        if (keys.keys[KEY_F10] && !previous.keys[KEY_F10]) {
+        KsWebCommand command;
+        if(ks_web_take_command(&command)){
+            last_command=command.id;
+            if(editor.open){command_status=-1;snprintf(command_message,sizeof(command_message),"Close the on-console editor first");}
+            else{command_status=ks_editor_commit(&editor,&command.config,command.revision,command.title,command.save);snprintf(command_message,sizeof(command_message),"%s",editor.status);}
+        }
+        bool native_ready=ks_overlay_ready(now_us());
+        bool sidebar_shortcut=(keys.keys[0x41]&&!previous.keys[0x41])||((keys.keys[224]||keys.keys[228])&&(keys.keys[226]||keys.keys[230])&&keys.keys[16]&&!previous.keys[16]);
+        bool consume=ks_editor_tick(&editor,&keys,buttons,dx,dy,now_us(),native_ready);
+        if(sidebar_shortcut&&!native_ready)notify(editor.status);
+        if (keys.keys[KEY_F10] && !previous.keys[KEY_F10] && !consume) {
             enabled = !enabled;
             ks_mapper_reset(&mapper);
             notify(enabled ? "input resumed" : "input paused (F10 resumes)");
         }
-        if (keys.keys[KEY_F9] && !previous.keys[KEY_F9]) {
-            if (ks_config_load(CONFIG_PATH, &config, error, sizeof(error)) != 0) notify(error);
+        if (keys.keys[KEY_F9] && !previous.keys[KEY_F9] && !consume) {
+            if (ks_editor_reload(&editor) != 0) notify(editor.status);
             else { ks_mapper_reset(&mapper); notify("configuration reloaded"); }
         }
+        if(mapped_revision!=editor.revision){ks_mapper_reset(&mapper);mapped_revision=editor.revision;}
         previous = keys;
         KsPad state;
-        if (enabled) ks_map(&mapper, &config, &keys, buttons, dx, dy, now_us(), &state);
+        if (enabled&&!consume) ks_map(&mapper, &editor.active, &keys, buttons, dx, dy, now_us(), &state);
         else ks_pad_neutral(&state);
         int submit_result = ks_vpad_submit(&pad, &state);
         if (submit_result != 0) {
@@ -106,10 +124,15 @@ int main(void)
                 result = 1; break;
             }
         } else failures = 0;
-        KsWebSnapshot snapshot = {.keys = keys, .pad = state, .config = config,
+        KsWebSnapshot snapshot = {.keys = keys, .pad = state, .config = editor.active,.global_config=editor.global,
             .mouse_buttons = buttons, .mouse_dx = dx, .mouse_dy = dy,
-            .enabled = enabled, .submit_ok = submit_result == 0,
-            .uptime_us = now_us() - started, .sequence = ++sequence};
+            .enabled = enabled&&!consume, .submit_ok = submit_result == 0,
+            .uptime_us = now_us() - started, .sequence = ++sequence,
+            .profile_revision=editor.revision,.game_profile=editor.game_profile,
+            .editor_open=editor.open,.native_ready=native_ready,.command_id=last_command,.command_status=command_status};
+        snprintf(snapshot.title,sizeof(snapshot.title),"%s",editor.title);
+        snprintf(snapshot.profile_status,sizeof(snapshot.profile_status),"%s",editor.status);
+        snprintf(snapshot.command_message,sizeof(snapshot.command_message),"%s",command_message);
         for (unsigned i = 0; i < KS_DEVICE_LIMIT; ++i) {
             const KsUsbDevice *d = &usb.devices[i];
             if (!d->active) continue;
@@ -119,10 +142,13 @@ int main(void)
             device->interface_number = d->iface.number;
         }
         ks_web_publish(&snapshot);
+        if(sequence%8==0){KsSidebarFrame frame;ks_editor_frame(&editor,sequence,&frame);ks_overlay_publish(&frame,now_us());}
         uint64_t elapsed = now_us() - start;
         if (elapsed < TICK_US) usleep((unsigned)(TICK_US - elapsed));
     }
     ks_vpad_close(&pad);
+    editor.open=false;KsSidebarFrame frame;ks_editor_frame(&editor,++sequence,&frame);ks_overlay_publish(&frame,now_us());
+    ks_overlay_stop();
     ks_web_stop();
     ks_usb_shutdown(&usb);
     close(lock_fd); /* Keep lock inode; removing it introduces a race. */

@@ -101,5 +101,9 @@ void ks_map(KsMapper *m, const KsConfig *c, const KsKeyboard *kb,
         double magnitude = c->deadzone + fmin(1, length) * (1 - c->deadzone);
         x = x / length * magnitude; y = y / length * magnitude;
     } else { x = y = 0; }
+    x += (double)a[KS_RS_RIGHT] - a[KS_RS_LEFT];
+    y += (double)a[KS_RS_DOWN] - a[KS_RS_UP];
+    length = hypot(x,y);
+    if(length>1){x/=length;y/=length;}
     pad->rx = axis(x); pad->ry = axis(y);
 }
