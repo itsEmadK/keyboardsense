@@ -1,0 +1,32 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  payload:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm make curl unzip python3 nodejs
+      - name: Test mapper and parsers
+        run: |
+          make test
+          make test-sanitize
+      - name: Install pinned SDK
+        run: |
+          curl -fL https://github.com/ps5-payload-dev/sdk/releases/download/v0.45/ps5-payload-sdk.zip -o /tmp/sdk.zip
+          echo '5fac64093d0e3e69f2584ce7935f24f703f622d9681f1495c85b9f00d1291a2c  /tmp/sdk.zip' | sha256sum -c -
+          unzip -q /tmp/sdk.zip -d /tmp/ks-sdk
+      - name: Build and validate ELF
+        env:
+          PS5_PAYLOAD_SDK: /tmp/ks-sdk/ps5-payload-sdk
+        run: make -j2 package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyboardsense-experimental
+          path: dist/
+          if-no-files-found: error

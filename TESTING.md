@@ -33,7 +33,8 @@ Date: 2026-10-27. Version: 0.2.0 experimental.
   shutdown with an unfinished request, and clean server restart.
 
 The USB simulation replaces system calls. It does not verify Sony's USB/HID ABI,
-permissions, timing, firmware behavior, or actual device reports. Hosted CI has not yet been configured.
+permissions, timing, firmware behavior, or actual device reports. CI is included
+but has not been run on a hosted runner in this session.
 
 ## Console validation — pending
 
